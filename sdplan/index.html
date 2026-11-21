@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stream Deck + XL Layout Planner</title>
+<meta name="description" content="Plan Stream Deck + XL layouts: 36 keys, 6 dials, folders and pages. Runs in your browser; nothing is uploaded.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#16181d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Deck Planner">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<script>if('serviceWorker' in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a planning tool, calm and exact, reads like a hardware manual
+   IDEA: the device itself, drawn to scale, is the editing surface; folders open in place like on the hardware
+   PICTURE: 9x4 LCD key grid, touch strip, six dials in a charcoal housing
+   COLOUR and TYPE: white/black ground, charcoal housing, mint selection, category hues on keys; Space Grotesk + Inter
+   LAYOUT: profile tabs, then device left + inspector right; notes and conventions beneath */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0b0c0e);--ink:light-dark(#111316,#eceef1);--mute:light-dark(#5b6270,#9aa1ad);--line:light-dark(#e3e5e9,#24272d);--panel:light-dark(#f5f6f8,#15171b);--mint:#b8f5d0;--housing:#1a1c20;--housing2:#24272c}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-family:"Space Grotesk",Inter,sans-serif;line-height:1.05;margin:0;text-wrap:balance}
+h1{font-size:clamp(26px,3.4vw,40px)}h2{font-size:20px}h3{font-size:16px}
+.band{padding:clamp(18px,3vw,40px) max(4vw,16px)}
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between;padding-bottom:8px}
+.top p{margin:6px 0 0;color:var(--mute);max-width:72ch}
+button,select,input,textarea{font:inherit;font-size:16px;color:inherit}
+button{min-height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+button:hover{border-color:var(--mute)}button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.key:focus-visible,.dial:focus-visible{outline:3px solid #3ddc84;outline-offset:2px}
+button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button.danger{color:#c62f2f}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+.scroll{overflow-x:auto}
+.tabs{display:flex;gap:6px;padding:4px 0 12px;border-bottom:1px solid var(--line)}
+.tabs button{flex:none;border-radius:999px}
+.tabs .ver{background:transparent;border:1px solid var(--line)}
+.tabs .os{font-size:11px;font-weight:600;margin-left:6px;padding:1px 6px;border-radius:999px;background:var(--line);color:var(--ink)}
+.tabs button[aria-selected=true]{background:var(--mint);color:#0d3a22;border-color:var(--mint);font-weight:600}
+.work{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start;margin-top:16px}
+@media(max-width:1180px){.work{grid-template-columns:minmax(0,1fr)}}
+.pagebar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
+.pagebar .pg{min-height:36px;border-radius:8px}
+.pagebar .pg[aria-selected=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.pagebar .sp{flex:1}
+.crumb{display:flex;gap:10px;align-items:center;min-height:36px;margin-bottom:10px;font-size:14px;color:var(--mute)}
+.crumb b{color:var(--ink)}
+.devwrap{overflow-x:auto;padding-bottom:6px}
+.device{min-width:700px;max-width:980px;background:linear-gradient(180deg,var(--housing2),var(--housing));border-radius:28px;padding:22px 24px 26px;box-shadow:0 24px 48px -24px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08);color:#f2f4f7;transition:box-shadow .2s}
+.device.infolder{box-shadow:0 24px 48px -24px rgba(0,0,0,.55),inset 0 0 0 3px rgba(184,245,208,.35)}
+.keys{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:10px}
+.key{aspect-ratio:1;border-radius:12px;background:#2b2e34;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:6px;cursor:pointer;user-select:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),0 3px 0 #0e0f11;position:relative;transition:transform .12s}
+.key:hover{transform:translateY(-1px)}
+.key b{font-size:12.5px;line-height:1.15;font-weight:600;overflow-wrap:anywhere}
+.key small{font-size:10.5px;opacity:.82;margin-top:4px;line-height:1.1;overflow-wrap:anywhere;max-height:2.3em;overflow:hidden}
+.key.empty{background:#202226;color:#5b616c}
+.key.nav,.key.back{background:#15171a;color:#9aa1ad;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 3px 0 #0e0f11}
+.key.sel,.dial.sel .knob{box-shadow:0 0 0 3px var(--mint),0 3px 0 #0e0f11}
+.key.over{outline:2px dashed var(--mint)}
+.key.frame::after{content:"";position:absolute;top:6px;left:6px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.55)}
+.badge{position:absolute;top:4px;right:5px;font-size:10px;font-weight:700;line-height:1;padding:3px 4px;border-radius:5px;background:rgba(0,0,0,.35);color:#fff}
+.strip{margin:18px 0 14px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:#050607;border-radius:8px;padding:6px;gap:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.seg{background:#101317;border-radius:5px;padding:5px 8px;font-size:11px;line-height:1.25;color:#c8ccd3}
+.seg b{display:block;color:#fff;font-size:12px}
+.dials{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.dial{display:flex;flex-direction:column;align-items:center;cursor:pointer;border-radius:12px;padding:4px}
+.knob{width:62px;height:62px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#4a4e56,#1b1d21 70%);box-shadow:0 4px 0 #0b0c0e,inset 0 1px 0 rgba(255,255,255,.15);position:relative}
+.knob::before{content:"";position:absolute;left:50%;top:7px;width:3px;height:12px;margin-left:-1.5px;border-radius:2px;background:var(--mint)}
+.dial span{font-size:11px;color:#b6bbc4;margin-top:8px;text-align:center;line-height:1.2}
+.insp{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;position:sticky;top:12px}
+@media(max-width:1180px){.insp{position:static}}
+.insp label{display:block;font-size:13px;color:var(--mute);margin:12px 0 4px}
+.insp input,.insp select,.insp textarea{width:100%;min-height:42px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+.insp textarea{min-height:80px;resize:vertical}
+.insp .tools{margin-top:14px}
+.hint{font-size:13px;color:var(--mute);margin:8px 0 0}
+.below{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:24px;margin-top:28px}
+@media(max-width:900px){.below{grid-template-columns:minmax(0,1fr)}}
+.notes{white-space:pre-wrap;font-size:15px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-height:220px;width:100%}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:10px}
+.legend div{display:flex;gap:8px;align-items:center;font-size:14px}
+.legend i{width:18px;height:18px;border-radius:5px;flex:none}
+.conv{margin:10px 0 0;padding-left:18px;font-size:15px}
+.conv li{margin:4px 0}
+.io{margin-top:28px;border-top:1px solid var(--line);padding-top:18px}
+.io textarea{width:100%;min-height:140px;border-radius:12px;border:1px solid var(--line);background:var(--panel);padding:10px;font:13px/1.45 ui-monospace,Menlo,monospace}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+.notice{display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--mint);color:#0d3a22;border-radius:12px;padding:10px 14px;margin:0 0 10px;font-size:15px}
+.notice button{min-height:34px;background:rgba(255,255,255,.6);border-color:transparent;color:#0d3a22}
+.ck{margin:0 0 8px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.ck summary{cursor:pointer;padding:12px 14px;font-weight:600;display:flex;justify-content:space-between;gap:12px}
+.ck summary span{color:var(--mute);font-weight:500;font-size:14px}
+.ck table{width:100%;border-collapse:collapse;font-size:14px}
+.ck th,.ck td{text-align:left;padding:7px 14px;border-top:1px solid var(--line);vertical-align:top}
+.ck th{color:var(--mute);font-weight:500}
+.ck tr.done td{color:var(--mute);text-decoration:line-through}
+.ck input{width:18px;height:18px}
+.tag{display:inline-block;font-size:12px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);white-space:nowrap}
+@media(prefers-reduced-motion:reduce){.key,.toast,.device{transition:none}.key:hover{transform:none}}
+</style>
+</head>
+<body>
+<div class="band">
+  <div class="top">
+    <div>
+      <h1>Stream Deck + XL layout planner</h1>
+      <p>36 keys (9×4), touch strip and 6 push-dials. Click a key or dial to edit it; drag keys to swap. Folder keys (▸) open in place, with Back in the top-left like on the device. Changes stay in this browser; use Export to keep a copy.</p>
+    </div>
+    <div class="tools">
+      <button id="undo" type="button">Undo</button>
+      <button id="copyText" type="button">Copy profile as text</button>
+      <button id="exportBtn" type="button">Export / import</button>
+    </div>
+  </div>
+  <div id="notices"></div>
+  <nav class="tabs scroll" id="profTabs" role="tablist" aria-label="Profiles"></nav>
+  <div class="work">
+    <section aria-label="Device">
+      <div class="pagebar" id="pageBar"></div>
+      <div class="crumb" id="crumb"></div>
+      <div class="devwrap">
+        <div class="device" id="device">
+          <div class="keys" id="keys"></div>
+          <div class="strip" id="strip"></div>
+          <div class="dials" id="dials"></div>
+        </div>
+      </div>
+    </section>
+    <aside class="insp" id="insp" aria-live="polite"></aside>
+  </div>
+  <div class="below">
+    <section>
+      <h2>Profile notes</h2>
+      <p class="hint" style="margin:6px 0 10px">Setup notes, plugin requirements and custom-plugin ideas for this profile. Editable.</p>
+      <textarea class="notes" id="notes" aria-label="Profile notes"></textarea>
+    </section>
+    <section>
+      <h2>Conventions</h2>
+      <ul class="conv">
+        <li>Suggested frame: column 9 on every page holds Home (top), ◀ Page, Page ▶, then Save or another critical action (bottom).</li>
+        <li>App profiles keep Undo and Redo bottom-left, where ⌘Z sits on a keyboard.</li>
+        <li>Keys with a corner dot are the fixed frame and stay put on every page.</li>
+        <li>Give related apps shared slots — the same function on the same key across, say, two video editors or two Adobe apps — so muscle memory carries over.</li>
+        <li>Dial 6 is an Action Trigger: turn = previous/next page, push = page 1. Swiping the touch strip also changes pages.</li>
+        <li>“custom” = no default shortcut; bind one in the app first. “verify” = check against the app’s shortcut list.</li>
+      </ul>
+      <h3 style="margin-top:18px">Key types</h3>
+      <ul class="conv">
+        <li><b>▸</b> Folder — opens a sub-layout; Back is top-left. Set Auto Exit (up to 60 s) for quick-pick folders.</li>
+        <li><b>⇄</b> Two-state toggle — Hotkey Switch or Multi Action Switch.</li>
+        <li><b>⏱</b> Key Logic — separate actions for press, double press and press-and-hold.</li>
+      </ul>
+      <h3 style="margin-top:18px">Categories</h3>
+      <div class="legend" id="legend"></div>
+    </section>
+  </div>
+  <section class="io" id="check">
+    <div class="top" style="padding:0"><div><h2>Assignment checklist</h2><p class="hint" style="margin:6px 0 0">Every key and dial that still needs work, by app, built live from the layouts above. Tick items off as you go.</p></div>
+    <div class="tools"><select id="ckFilter" aria-label="Filter checklist"><option value="all">All types</option><option value="custom">Bind a shortcut (custom)</option><option value="verify">Check shortcut (verify)</option><option value="plug">Needs custom plugin</option></select><label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" id="ckHide"> Hide done</label><button type="button" id="ckCopy">Copy as text</button><button type="button" id="ckCsv">Copy as CSV</button></div></div>
+    <div id="ckList" style="margin-top:14px"></div>
+  </section>
+  <section class="io" id="io" hidden>
+    <h2>Export / import</h2>
+    <p class="hint" style="margin:6px 0 10px">Export all profiles at once, or just the one you’re viewing. Importing merges by default: profiles in the file update their matching profile here (matched by profile ID, then by name), profiles that aren’t here yet are added, and everything else is left alone. Tick “Replace everything” to swap in the file wholesale instead.</p>
+    <textarea id="ioText" aria-label="Layout JSON"></textarea>
+    <div class="tools" style="margin-top:10px">
+      <button type="button" id="ioCopy" class="primary">Copy all (JSON)</button><button type="button" id="ioCopyOne">Copy this profile</button>
+      <button type="button" id="ioSave">Download all</button><button type="button" id="ioSaveOne">Download this profile</button><button type="button" id="ioApply">Import pasted JSON</button><button type="button" id="ioOpen">Import .json file</button><label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" id="ioReplace"> Replace everything</label><input type="file" id="ioFile" accept=".json,application/json" hidden>
+      <button type="button" id="ioReset" class="danger">Reset all to defaults</button>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+{
+const GROUPS={sys:['System / navigation','#3f4654'],tool:['Tools / sources','#1f5fbf'],edit:['Edit','#a8620f'],sel:['Select / chat mode','#6b45c9'],view:['View / scenes / modes','#0f7f78'],play:['Transport','#1e8a44'],rec:['Record / live / critical','#c62f2f'],out:['Export / share / render','#b03a78'],expr:['Character / expressions','#b54ccc'],mix:['Audio','#0b7fa3'],color:['Color / grade','#8f7710'],mark:['Markers / rating / popovers','#5a8a16']};
+const PAGES_DIAL='Pages|Previous page|Next page|Page 1';
+const DEF=[];
+
+const MAXPAGES=10;
+const OSL={mac:'Mac',pc:'PC',both:'Mac + PC'};
+const blank=()=>({l:'',a:'',g:'sys',t:'action',a2:'',h:'',d:'',f:'',n:''});
+function mk(s){const k=blank();if(!s)return k;const[l='',a='',g='sys',x='']=s.split('|');Object.assign(k,{l,a,g});
+ if(x.startsWith('>')){k.t='folder';k.f=x.slice(1)}else if(x.startsWith('~')){k.t='switch';k.a2=x.slice(1)}else if(x.startsWith('!')){k.t='logic';k.h=x.slice(1)}return k}
+const navKey=dir=>({...blank(),t:'nav',l:dir<0?'◀ Page':'Page ▶',a:dir<0?'SD: Previous Page':'SD: Next Page'});
+const backKey=()=>({...blank(),t:'back',l:'◀ Back',a:'SD: Folder back (hold = exit)'});
+const dial=s=>{const[n='',l='',r='',p='']=s.split('|');return{n,l,r,p}};
+function buildProf(d){const P={id:'def:'+d.name,name:d.name,os:d.os,notes:d.notes,frame:[8,35].concat(d.undo?[27,28]:[]),folders:{},pages:[]};
+ P.pages=d.pages.map(p=>{const keys=[];for(let r=0;r<4;r++){const row=p.rows[r]||[];for(let c=0;c<8;c++)keys.push(mk(row[c]));keys.push(r==0?mk(d.c9[0]):r==3?mk(d.c9[1]):blank())}return{name:p.name,keys,dials:(p.dials||d.dials).map(dial)}});
+ Object.entries(d.folders||{}).forEach(([id,f])=>{const keys=[];for(let r=0;r<4;r++){const row=f.rows[r]||[];if(r==0){keys.push(backKey());for(let c=0;c<8;c++)keys.push(mk(row[c]))}else for(let c=0;c<9;c++)keys.push(mk(row[c]))}P.folders[id]={name:f.name,keys}});
+ fixNav(P);return P}
+function fixNav(P){const n=P.pages.length;P.pages.forEach((p,i)=>{[[17,-1,i>0],[26,1,i<n-1]].forEach(([slot,dir,want])=>{const k=p.keys[slot];if(k.t=='nav'||(!k.l&&!k.a)){p.keys[slot]=want?navKey(dir):blank()}})})}
+const build=()=>({active:0,profiles:DEF.length?DEF.map(buildProf):[newProf()],seen:DEF.map(d=>d.name),revs:Object.fromEntries(DEF.map(d=>[d.name,d.rev||1])),done:{},notices:[]});
+const V1=[];
+const TOK={up:'↑',down:'↓',left:'←',right:'→','↑':'↑','↓':'↓','←':'←','→':'→',shift:'⇧',play:'Space',space:'Space',opt:'⌥',option:'⌥',alt:'⌥',edit:'⌃',ctrl:'⌃',control:'⌃',delete:'Delete',del:'Delete',esc:'Esc',escape:'Esc',enter:'Return',return:'Return'};
+const MODS=['⇧','⌥','⌃'];
+function tr(inner){if(/^\s*(opt|option|alt)\s*\+\s*(edit|ctrl|control)\s*$|^\s*(edit|ctrl|control)\s*\+\s*(opt|option|alt)\s*$/i.test(inner))return'Delete';const parts=inner.split(/\s*(?:\+|,|\s)\s*/).filter(Boolean);let mods=[],keys=[],ok=true;
+ for(const p of parts){const q=p.toLowerCase();let t=TOK[q];if(!t){if(/^f\d{1,2}$/i.test(p))t=p.toUpperCase();else if(/^[a-z0-9]$/i.test(p))t=p.toUpperCase();else{ok=false;continue}}(MODS.includes(t)?mods:keys).push(t)}
+ const order=['⌃','⌥','⇧'];mods.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+ return ok&&(mods.length||keys.length)?mods.join('')+(keys.join(' ')||''):null}
+function fixBrackets(){let filled=0,left=0;
+ [].filter(p=>p).forEach(p=>{
+  const all=[...p.pages.flatMap(g=>g.keys),...Object.values(p.folders||{}).flatMap(f=>f.keys)];
+  all.forEach(k=>{if(k.t=='nav'||k.t=='back')return;let touched=false;
+   ['a','a2','h','d'].forEach(f=>{if(!k[f]||!k[f].includes('['))return;k[f]=k[f].replace(/\]\s*\+\s*\[/g,'+').replace(/\[([^\]]+)\]/g,(m,inner)=>{const t=tr(inner);if(t){filled++;touched=true;return t}left++;return m})});
+   if(k.l&&k.l.includes('[')&&(!k.a||k.a.includes('['))){const m=[...k.l.replace(/\]\s*\+\s*\[/g,'+').matchAll(/\[([^\]]+)\]/g)].map(x=>tr(x[1]));if(m.length&&m.every(Boolean)){k.a=m.join(' then ');filled++;touched=true}else left++}
+   if(touched)k.n=(k.n?k.n+'\n':'')+'Auto-filled from bracketed keys using m8c’s default map — check.'});
+  p.pages.forEach(g=>g.dials.forEach(d=>['l','r','p'].forEach(f=>{if(d[f]&&d[f].includes('['))d[f]=d[f].replace(/\[([^\]]+)\]/g,(m,inner)=>{const t=tr(inner);if(t){filled++;return t}left++;return m})})))});
+ if(filled||left)S.notices.push(`Your M8 preset: filled ${filled} bracketed key${filled==1?'':'s'} from m8c’s default map${left?`; ${left} could not be read and still show brackets`:''}. Compare with the new “M8 Headless (m8c)” reference profile.`)}
+function migrate(){S.seen=S.seen||V1.slice();S.revs=S.revs||{};S.done=S.done||{};S.notices=S.notices||[];
+ S.profiles.forEach(p=>{if(p.os)return;const d=DEF.find(d=>d.name==p.name.replace(/ \(before update\)$/,''));if(d&&d.os)p.os=d.os});
+ DEF.forEach((d,i)=>{const rev=d.rev||1;
+  if(!S.seen.includes(d.name)){const prev=i?S.profiles.findIndex(p=>p.name==DEF[i-1].name):-1;S.profiles.splice(prev<0?S.profiles.length:prev+1,0,buildProf(d));S.seen.push(d.name);S.revs[d.name]=rev;S.notices.push(`Added the “${d.name}” profile.`);return}
+  if((S.revs[d.name]||1)<rev){const idx=S.profiles.findIndex(p=>p.name==d.name);if(idx>=0&&d.patch){d.patch(S.profiles[idx],buildProf(d));S.notices.push(`Updated “${d.name}” in place (your edits kept).`)}else if(idx>=0){S.profiles[idx].name=d.name+' (before update)';S.profiles.splice(idx,0,buildProf(d));S.notices.push(`Updated “${d.name}”. Your previous copy is kept as “${d.name} (before update)” — delete it if you don’t need it.`)}S.revs[d.name]=rev}});
+ fixBrackets();ensureIds();S.notices=[...new Set(S.notices)];try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const KEY='sdxl-layout-planner';
+let S;try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+const uid=()=>'p'+Math.random().toString(36).slice(2,10);
+function newProf(){const keys=[];for(let i=0;i<36;i++)keys.push(i==8?mk('Home|SD: Switch Profile ▸ Home|sys'):i==35?mk('Save|⌘S|sys'):blank());return {id:uid(),name:'New profile',notes:'',frame:[8,35],folders:{},pages:[{name:'Main',keys,dials:[...Array(5)].map(()=>dial('Dial|||')).concat([dial(PAGES_DIAL)])}]}}
+const VF=['pages','folders','frame','notes'];
+const content=p=>JSON.parse(JSON.stringify(Object.fromEntries(VF.map(f=>[f,p[f]]))));
+const verList=p=>[{id:p.vid,name:p.vname||'Main',created:p.vcreated||0,active:true},...(p.versions||[]).map(v=>({id:v.id,name:v.name,created:v.created||0}))].sort((a,b)=>a.created-b.created);
+const vidOf=p=>p.vid||(p.vid='v-'+(p.id||uid()));
+function switchVersion(p,id){vidOf(p);const i=(p.versions||[]).findIndex(v=>v.id==id);if(i<0)return;const t=p.versions.splice(i,1)[0];
+ p.versions.push(Object.assign({id:p.vid,name:p.vname||'Main',created:p.vcreated||0,saved:Date.now()},content(p)));VF.forEach(f=>{p[f]=t[f]});p.vid=t.id;p.vname=t.name;p.vcreated=t.created||0}
+function newVersion(p){vidOf(p);p.versions=p.versions||[];p.versions.push(Object.assign({id:p.vid,name:p.vname||'Main',created:p.vcreated||0,saved:Date.now()},content(p)));p.vid=uid();p.vcreated=Date.now();p.vname='Version '+(p.versions.length+1)}
+function deleteVersion(p){if(!p.versions||!p.versions.length)return false;const t=p.versions.sort((a,b)=>(b.saved||0)-(a.saved||0)).shift();VF.forEach(f=>{p[f]=t[f]});p.vid=t.id;p.vname=t.name;p.vcreated=t.created||0;if(!p.versions.length)delete p.versions;return true}
+const isBlankProf=p=>{const f=newProf();return p.name==f.name&&!p.notes&&!(p.versions&&p.versions.length)&&!Object.keys(p.folders||{}).length&&JSON.stringify(p.pages)==JSON.stringify(f.pages)};
+function ensureIds(){const used=new Set();S.profiles.forEach(p=>{if(!p.id||used.has(p.id))p.id=DEF.some(d=>d.name==p.name)&&!used.has('def:'+p.name)?'def:'+p.name:uid();used.add(p.id);if(!p.vid)p.vid='v-'+p.id})}
+/* ── Data versioning ──────────────────────────────────────────────
+ SCHEMA is the version of the saved / exported data format.
+   1 = original planner data (no profile IDs or platforms)
+   2 = optional profile platform (os)
+   3 = stable profile IDs; exports wrapped in {format, schema, kind, …}
+   4 = layout versions per profile (vid / vname / versions[])
+ To change the format later: bump SCHEMA and add UPGRADE[newSchema], a
+ function that turns state of the previous schema into the new one. Imports
+ and saved data from any older schema are upgraded step by step; data from a
+ newer schema is kept as-is (unknown fields survive) and flagged. */
+const SCHEMA=4,APP_VERSION='2026.11.21',FORMAT='sdxl-planner';
+const UPGRADE={4:s=>s,2:s=>s,3:s=>{(s.profiles||[]).forEach(p=>{if(p&&p.id==null)delete p.id});return s}};
+const str=(v,d='')=>v==null?d:typeof v=='string'?v:String(v);
+function normKeys(arr){const out=Array.isArray(arr)?arr.slice(0,36).map(k=>k&&typeof k=='object'?Object.assign(blank(),k,{l:str(k.l),a:str(k.a),g:str(k.g,'sys'),t:str(k.t,'action'),a2:str(k.a2),h:str(k.h),d:str(k.d),f:str(k.f),n:str(k.n)}):blank()):[];while(out.length<36)out.push(blank());return out}
+function normDials(arr){const out=(Array.isArray(arr)?arr:[]).slice(0,6).map(d=>d&&typeof d=='object'?Object.assign({},d,{n:str(d.n),l:str(d.l),r:str(d.r),p:str(d.p)}):dial('Dial|||'));while(out.length<5)out.push(dial('Dial|||'));if(out.length<6)out.push(dial(PAGES_DIAL));return out}
+function normProfile(p){if(!p||typeof p!='object'||!Array.isArray(p.pages)||!p.pages.length)return null;
+ const q=Object.assign({},p,{name:str(p.name,'Imported profile')||'Imported profile',notes:str(p.notes),frame:Array.isArray(p.frame)?p.frame.filter(n=>Number.isInteger(n)&&n>=0&&n<36):[8,35],folders:{}});
+ Object.entries(p.folders&&typeof p.folders=='object'?p.folders:{}).forEach(([id,f])=>{if(f&&typeof f=='object')q.folders[id]=Object.assign({},f,{name:str(f.name,'Folder'),keys:normKeys(f.keys)})});
+ q.pages=p.pages.filter(g=>g&&typeof g=='object').slice(0,MAXPAGES).map(g=>Object.assign({},g,{name:str(g.name,'Page'),keys:normKeys(g.keys),dials:normDials(g.dials)}));
+ if(!q.pages.length)return null;if(q.os!=null&&!OSL[q.os])delete q.os;
+ if(p.versions!=null){q.versions=(Array.isArray(p.versions)?p.versions:[]).map(v=>{if(!v||typeof v!='object')return null;const n=normProfile(Object.assign({},v,{versions:undefined}));if(!n)return null;delete n.versions;delete n.os;delete n.vid;delete n.vname;n.id=str(v.id)||uid();n.name=str(v.name,'Version')||'Version';return n}).filter(Boolean);if(!q.versions.length)delete q.versions}
+ if(q.vname!=null)q.vname=str(q.vname);return q}
+const inferSchema=o=>{const ps=(o&&(o.profiles||(o.state&&o.state.profiles)))||[];return ps.some(p=>p&&p.id)?3:ps.some(p=>p&&p.os)?2:1};
+function upgrade(o,from){for(let v=from+1;v<=SCHEMA;v++)if(UPGRADE[v])o=UPGRADE[v](o)||o;return o}
+function normState(s){const ps=(Array.isArray(s.profiles)?s.profiles:[]).map(normProfile);const bad=ps.filter(x=>!x).length;
+ const o=Object.assign({},s,{profiles:ps.filter(Boolean),seen:Array.isArray(s.seen)?s.seen:undefined,revs:s.revs&&typeof s.revs=='object'?s.revs:{},done:s.done&&typeof s.done=='object'?s.done:{},notices:Array.isArray(s.notices)?s.notices.filter(n=>typeof n=='string'):[]});
+ o.active=Math.max(0,Math.min(Number.isInteger(s.active)?s.active:0,o.profiles.length-1));return [o,bad]}
+function loadSaved(s){const from=Number.isInteger(s.schema)?s.schema:inferSchema(s);let [o,bad]=normState(from<SCHEMA?upgrade(s,from):s);
+ if(!o.profiles.length)return build();if(from>SCHEMA)o.notices.push(`Your saved layouts were last saved by a newer version of this planner (data format ${from}; this page is ${SCHEMA}). Reload to get the latest version — until then, newer settings are kept but may not be editable here.`);else o.schema=SCHEMA;
+ if(bad)o.notices.push(`${bad} damaged profile${bad>1?'s':''} couldn’t be loaded and ${bad>1?'were':'was'} skipped.`);return o}
+if(!S||!Array.isArray(S.profiles))S=build();else{S=loadSaved(S);migrate()}
+ensureIds();
+S.schema=S.schema>SCHEMA?S.schema:SCHEMA;
+let pageIx=0,path=[],sel=null,hist=[],armDel=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const P=()=>S.profiles[S.active],PG=()=>P().pages[pageIx];
+const curFolder=()=>path.length?P().folders[path[path.length-1]]:null;
+const KS=()=>curFolder()?curFolder().keys:PG().keys;
+function save(){S.notices=[...new Set(S.notices||[])];try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}clearTimeout(save.t);save.t=setTimeout(()=>{try{renderCheck()}catch(e){}},250)}
+function snap(){hist.push(JSON.stringify(S));if(hist.length>60)hist.shift()}
+function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),1700)}
+function renderTabs(){$('profTabs').innerHTML=S.profiles.map((p,i)=>`<button type="button" role="tab" aria-selected="${i==S.active}" data-p="${i}">${esc(p.name)}${p.versions&&p.versions.length?`<span class="os ver">${esc(p.vname||'Main')}</span>`:''}${p.os?`<span class="os">${OSL[p.os]}</span>`:''}</button>`).join('')+'<button type="button" id="addProf">+ Profile</button>'}
+function renderPages(){const pg=P().pages;$('pageBar').innerHTML=pg.map((p,i)=>`<button type="button" class="pg" role="tab" aria-selected="${i==pageIx&&!path.length}" data-pg="${i}">${i+1} · ${esc(p.name)}</button>`).join('')+`<span class="sp"></span><button type="button" class="pg" id="addPage"${pg.length>=MAXPAGES?' disabled':''}>+ Page</button><button type="button" class="pg" id="dupPage"${pg.length>=MAXPAGES?' disabled':''}>Duplicate</button><button type="button" class="pg danger" id="delPage">${armDel=='page'?'Confirm delete':'Delete page'}</button>`}
+function renderCrumb(){const c=$('crumb');if(!path.length){c.innerHTML=`<span>Page ${pageIx+1} of ${P().pages.length} (max ${MAXPAGES})</span>`;return}
+ c.innerHTML=`<button type="button" class="pg" id="upBtn">◀ Back</button><span>Page ${pageIx+1} · ${esc(PG().name)}${path.map(id=>' ▸ <b>'+esc(P().folders[id]?.name||id)+'</b>').join('')}</span>`}
+function badge(k){return k.t=='folder'?'<span class="badge">▸</span>':k.t=='switch'?'<span class="badge">⇄</span>':k.t=='logic'?'<span class="badge">⏱</span>':''}
+function keyHTML(k,i){const g=GROUPS[k.g]||GROUPS.sys,sys=k.t=='nav'||k.t=='back',empty=!sys&&!k.l&&!k.a,s=sel&&sel.t=='k'&&sel.i==i,fr=!path.length&&P().frame.includes(i);
+ const tip=[k.l,k.a,k.a2&&('State 2: '+k.a2),k.h&&('Hold: '+k.h),k.d&&('Double: '+k.d),k.n].filter(Boolean).join('\n');
+ return`<div class="key${empty?' empty':''}${sys?' '+k.t:''}${s?' sel':''}${fr?' frame':''}" tabindex="0" draggable="${!sys}" data-k="${i}" style="${empty||sys?'':'background:'+g[1]}" title="${esc(tip)}">${badge(k)}<b>${esc(k.l)||(empty?'':'')}</b>${k.a&&!sys?`<small>${esc(k.a)}</small>`:''}</div>`}
+function renderDevice(){const p=PG();$('device').classList.toggle('infolder',!!path.length);$('keys').innerHTML=KS().map(keyHTML).join('');
+ $('strip').innerHTML=p.dials.map(d=>`<div class="seg"><b>${esc(d.n)}</b>◀ ${esc(d.l)}<br>${esc(d.r)} ▶</div>`).join('');
+ $('dials').innerHTML=p.dials.map((d,i)=>`<div class="dial${sel&&sel.t=='d'&&sel.i==i?' sel':''}" tabindex="0" data-d="${i}"><div class="knob"></div><span>Push: ${esc(d.p)}</span></div>`).join('')}
+const TYPES=[['action','Action / hotkey'],['switch','Two-state toggle (⇄)'],['logic','Key Logic: press / double / hold (⏱)'],['folder','Folder (▸)']];
+function inp(id,f,label,v){return`<label for="${id}">${label}</label><input id="${id}" data-f="${f}" value="${esc(v)}">`}
+function renderInsp(){const el=$('insp');
+ if(!sel){const f=curFolder();el.innerHTML=f?`<h2>Folder: ${esc(f.name)}</h2><label for="fFold">Folder name</label><input id="fFold" value="${esc(f.name)}"><p class="hint">Back sits top-left, as on the device. Hold Back on the device to exit all folders.</p><div class="tools"><button type="button" id="upBtn2">◀ Back</button></div>`
+ :`<h2>${esc(P().name)}</h2><p class="hint">${P().pages.length} pages · page ${pageIx+1}: ${esc(PG().name)}</p><label for="fProf">Profile name</label><input id="fProf" value="${esc(P().name)}"><label for="fOs">Platform</label><select id="fOs">${[['','Not set'],['mac','Mac'],['pc','PC'],['both','Mac + PC']].map(([v,n])=>`<option value="${v}"${(P().os||'')==v?' selected':''}>${n}</option>`).join('')}</select><label for="fVer">Layout version</label><select id="fVer">${verList(P()).map(v=>`<option value="${esc(v.id)}"${v.active?' selected':''}>${esc(v.name)}</option>`).join('')}</select><label for="fVerName">Version name</label><input id="fVerName" value="${esc(P().vname||'Main')}"><div class="tools"><button type="button" id="verNew">New version from this one</button>${P().versions&&P().versions.length?`<button type="button" class="danger" id="verDel">${armDel=='ver'?'Confirm delete version':'Delete this version'}</button>`:''}</div><p class="hint">Versions let you try a different layout for this app without another tab. Switching keeps every version as it was.</p><label for="fPage">Page name</label><input id="fPage" value="${esc(PG().name)}"><p class="hint">Select a key or dial to edit it. Drag a key onto another to swap. Open folders from the inspector or by double-clicking.</p><div class="tools">${DEF.some(d=>d.name==P().name)?`<button type="button" id="resetProf">${armDel=='reset'?'Confirm reset':'Reset to default'}</button>`:''}<button type="button" class="danger" id="delProf">${armDel=='prof'?'Confirm delete profile':'Delete profile'}</button></div>`;return}
+ if(sel.t=='k'){const k=KS()[sel.i],pos=`Row ${Math.floor(sel.i/9)+1}, column ${sel.i%9+1}`;
+  if(k.t=='nav'||k.t=='back'){el.innerHTML=`<h2>${esc(k.l)}</h2><p class="hint">${pos}. ${k.t=='nav'?'Stream Deck places page keys automatically; they can be moved but not deleted. The planner keeps them in column 9.':'Folder back key, placed by Stream Deck.'}</p><div class="tools"><button type="button" id="done" class="primary">Done</button></div>`;return}
+  let h=`<h2>Key</h2><p class="hint">${pos}${!path.length&&P().frame.includes(sel.i)?' · fixed frame':''}</p>`+inp('fL','l','Label',k.l)+`<label for="fT">Key type</label><select id="fT" data-f="t">${TYPES.map(([v,n])=>`<option value="${v}"${v==k.t?' selected':''}>${n}</option>`).join('')}</select>`;
+  if(k.t=='switch')h+=inp('fA','a','State 1 action',k.a)+inp('fA2','a2','State 2 action',k.a2);
+  else if(k.t=='logic')h+=inp('fA','a','Press',k.a)+inp('fD','d','Double press',k.d)+inp('fH','h','Press and hold',k.h);
+  else if(k.t=='folder')h+=inp('fA','a','Description',k.a);
+  else h+=inp('fA','a','Action / shortcut',k.a);
+  h+=`<label for="fG">Category</label><select id="fG" data-f="g">${Object.entries(GROUPS).map(([v,[n]])=>`<option value="${v}"${v==k.g?' selected':''}>${n}</option>`).join('')}</select><label for="fN">Note</label><textarea id="fN" data-f="n">${esc(k.n)}</textarea><div class="tools">${k.t=='folder'?'<button type="button" id="openF" class="primary">Open folder</button>':''}${path.length?'':'<button type="button" id="toAll">Copy to all pages</button>'}<button type="button" id="clr">Clear key</button><button type="button" id="done">Done</button></div>`;
+  el.innerHTML=h}
+ else{const d=PG().dials[sel.i];el.innerHTML=`<h2>Dial ${sel.i+1}</h2><p class="hint">Dials belong to the page.</p>`+inp('dN','n','Name (touch strip)',d.n)+inp('dL','l','Turn left',d.l)+inp('dR','r','Turn right',d.r)+inp('dP','p','Push',d.p)+`<div class="tools"><button type="button" id="toAll">Copy to all pages</button><button type="button" id="done" class="primary">Done</button></div>`}}
+function render(){renderTabs();renderPages();renderCrumb();renderDevice();renderInsp();$('notes').value=P().notes||''}
+$('legend').innerHTML=Object.values(GROUPS).map(([n,c])=>`<div><i style="background:${c}"></i>${n}</div>`).join('');
+function openFolder(k){if(!k.f){k.f='f'+Date.now().toString(36);}if(!P().folders[k.f]){const keys=[backKey()];for(let i=1;i<36;i++)keys.push(blank());P().folders[k.f]={name:k.l||'Folder',keys}}path.push(k.f);sel=null;save();render()}
+function up(){path.pop();sel=null;render()}
+$('profTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.id=='addProf'){snap();S.profiles.push(newProf());ensureIds();S.active=S.profiles.length-1}
+ else S.active=+b.dataset.p;pageIx=0;path=[];sel=null;armDel=null;save();render()});
+$('pageBar').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const pr=P(),pg=pr.pages;
+ if(b.dataset.pg){pageIx=+b.dataset.pg;path=[];sel=null;armDel=null}
+ else if(b.id=='addPage'){snap();pg.push({name:'Page '+(pg.length+1),keys:pg[0].keys.map((k,i)=>pr.frame.includes(i)?{...k}:blank()),dials:pg[0].dials.map(d=>({...d}))});pageIx=pg.length-1;path=[]}
+ else if(b.id=='dupPage'){snap();const c=JSON.parse(JSON.stringify(PG()));c.name+=' copy';pg.splice(pageIx+1,0,c);pageIx++;path=[]}
+ else if(b.id=='delPage'){if(pg.length<2){toast('A profile needs at least one page');return}if(armDel!='page'){armDel='page';renderPages();return}snap();pg.splice(pageIx,1);pageIx=Math.max(0,pageIx-1);armDel=null;sel=null;path=[]}
+ fixNav(pr);save();render()});
+$('crumb').addEventListener('click',e=>{if(e.target.id=='upBtn')up()});
+const dev=$('device');
+dev.addEventListener('click',e=>{const k=e.target.closest('.key'),d=e.target.closest('.dial');
+ if(k){const i=+k.dataset.k,key=KS()[i];if(key.t=='back'){up();return}sel={t:'k',i}}else if(d)sel={t:'d',i:+d.dataset.d};else return;armDel=null;renderDevice();renderInsp()});
+dev.addEventListener('dblclick',e=>{const k=e.target.closest('.key');if(!k)return;const key=KS()[+k.dataset.k];if(key.t=='folder')openFolder(key)});
+dev.addEventListener('keydown',e=>{if(e.key=='Enter'||e.key==' '){const t=e.target.closest('.key,.dial');if(t){e.preventDefault();t.click()}}});
+let dragFrom=null;
+dev.addEventListener('dragstart',e=>{const k=e.target.closest('.key');if(!k)return;dragFrom=+k.dataset.k;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',k.dataset.k)}catch(_){}});
+dev.addEventListener('dragover',e=>{const k=e.target.closest('.key');if(k&&dragFrom!=null){const t=KS()[+k.dataset.k].t;if(t=='nav'||t=='back')return;e.preventDefault();document.querySelectorAll('.key.over').forEach(x=>x.classList.remove('over'));k.classList.add('over')}});
+dev.addEventListener('drop',e=>{const k=e.target.closest('.key');if(!k||dragFrom==null)return;e.preventDefault();const to=+k.dataset.k;if(to!=dragFrom){snap();const ks=KS();[ks[dragFrom],ks[to]]=[ks[to],ks[dragFrom]];sel={t:'k',i:to};save()}dragFrom=null;renderDevice();renderInsp()});
+dev.addEventListener('dragend',()=>{dragFrom=null;document.querySelectorAll('.key.over').forEach(x=>x.classList.remove('over'))});
+let typing=false;
+$('insp').addEventListener('focusin',e=>{if(e.target.matches('input,select,textarea')&&!typing){snap();typing=true}});
+$('insp').addEventListener('focusout',()=>{typing=false});
+$('insp').addEventListener('input',e=>{const t=e.target;
+ if(t.id=='fVer'){snap();switchVersion(P(),t.value);pageIx=0;path=[];sel=null;armDel=null;save();render();toast(`Switched to “${P().vname}”`);return}
+ else if(t.id=='fVerName'){P().vname=t.value;renderTabs()}
+ else if(t.id=='fProf'){P().name=t.value;renderTabs()}else if(t.id=='fOs'){if(t.value)P().os=t.value;else delete P().os;renderTabs()}else if(t.id=='fPage'){PG().name=t.value;renderPages()}else if(t.id=='fFold'){curFolder().name=t.value;renderCrumb()}
+ else if(sel&&t.dataset.f){const o=sel.t=='k'?KS()[sel.i]:PG().dials[sel.i];o[t.dataset.f]=t.value;renderDevice();if(t.dataset.f=='t')renderInsp()}
+ save()});
+$('insp').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.id=='done')sel=null;
+ else if(b.id=='upBtn2'){up();return}
+ else if(b.id=='openF'){openFolder(KS()[sel.i]);return}
+ else if(b.id=='clr'){snap();KS()[sel.i]=blank()}
+ else if(b.id=='toAll'){snap();const src=sel.t=='k'?PG().keys[sel.i]:PG().dials[sel.i];P().pages.forEach(p=>{(sel.t=='k'?p.keys:p.dials)[sel.i]=JSON.parse(JSON.stringify(src))});toast('Copied to every page')}
+ else if(b.id=='verNew'){snap();newVersion(P());armDel=null;toast(`Created “${P().vname}” — the previous version is kept`)}
+ else if(b.id=='verDel'){if(armDel!='ver'){armDel='ver';renderInsp();return}snap();const gone=P().vname||'Main';deleteVersion(P());pageIx=0;path=[];armDel=null;toast(`Deleted “${gone}” (Undo to restore)`)}
+ else if(b.id=='resetProf'){if(armDel!='reset'){armDel='reset';renderInsp();return}snap();const fr=buildProf(DEF.find(d=>d.name==P().name));VF.forEach(f=>{P()[f]=fr[f]});pageIx=0;path=[];armDel=null;toast('Profile reset (Undo to revert)')}
+ else if(b.id=='delProf'){if(S.profiles.length<2){toast('Keep at least one profile');return}if(armDel!='prof'){armDel='prof';renderInsp();return}snap();S.profiles.splice(S.active,1);S.active=0;pageIx=0;path=[];armDel=null}
+ save();render()});
+$('notes').addEventListener('focus',snap);
+$('notes').addEventListener('input',e=>{P().notes=e.target.value;save()});
+$('undo').addEventListener('click',()=>{if(!hist.length){toast('Nothing to undo');return}S=JSON.parse(hist.pop());pageIx=Math.min(pageIx,P().pages.length-1);path=path.filter(id=>P().folders[id]);sel=null;save();render()});
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key=='z'&&!e.target.matches('input,textarea')){e.preventDefault();$('undo').click()}if(e.key=='Escape'){if(sel){sel=null;renderDevice();renderInsp()}else if(path.length)up()}});
+function kTxt(k){if(k.t=='nav'||k.t=='back'||(!k.l&&!k.a))return'—';let s=k.l;if(k.t=='folder'&&!s.includes('▸'))s+=' ▸';if(k.a)s+=' ['+k.a+']';if(k.t=='switch'&&k.a2)s+=' ⇄ ['+k.a2+']';if(k.t=='logic'){if(k.d)s+=' / double ['+k.d+']';if(k.h)s+=' / hold ['+k.h+']'}return s}
+function grid(keys){let t='';for(let r=0;r<4;r++)t+=`  Row ${r+1}: `+keys.slice(r*9,r*9+9).map(kTxt).join(' · ')+'\n';return t}
+function asText(){const p=P();let t=`${p.name}${p.versions&&p.versions.length?` — ${p.vname||'Main'}`:''}${p.os?` (${OSL[p.os]})`:''}\n`,seen=new Set();
+ const walk=(keys,depth)=>{keys.forEach(k=>{if(k.t=='folder'&&p.folders[k.f]&&!seen.has(k.f)){seen.add(k.f);t+=`\n${'  '.repeat(depth)}Folder ▸ ${p.folders[k.f].name}\n`+grid(p.folders[k.f].keys);walk(p.folders[k.f].keys,depth+1)}})};
+ p.pages.forEach((pg,i)=>{t+=`\nPage ${i+1} — ${pg.name}\n`+grid(pg.keys)+'  Dials: '+pg.dials.map((d,j)=>`${j+1} ${d.n} (◀ ${d.l} / ${d.r} ▶ / push ${d.p})`).join('; ')+'\n';walk(pg.keys,1)});return t}
+async function copy(txt,msg){try{await navigator.clipboard.writeText(txt);toast(msg)}catch(e){$('io').hidden=false;$('ioText').value=txt;$('ioText').select();toast('Clipboard blocked — text selected below')}}
+$('copyText').addEventListener('click',()=>copy(asText(),'Profile copied as text'));
+$('exportBtn').addEventListener('click',()=>{const io=$('io');io.hidden=!io.hidden;if(!io.hidden){$('ioText').value=JSON.stringify(S);io.scrollIntoView({behavior:'smooth'})}});
+const envelope=(kind,body)=>Object.assign({format:FORMAT,schema:SCHEMA,app:APP_VERSION,exported:new Date().toISOString(),kind},body);
+const allExport=()=>envelope('all',{state:S});
+const oneExport=()=>envelope('profiles',{revs:S.revs,done:Object.fromEntries(Object.entries(S.done||{}).filter(([k])=>k.startsWith(P().name+'|'))),profiles:[P()]});
+$('ioCopy').addEventListener('click',()=>copy(JSON.stringify(allExport()),'All profiles copied'));
+$('ioCopyOne').addEventListener('click',()=>copy(JSON.stringify(oneExport()),`“${P().name}” copied`));
+/* Reads any export this planner has ever produced, plus a bare profile or list of profiles.
+   Returns {kind, schema, state|profiles, revs, done} with everything upgraded and normalised. */
+function readImport(n){if(!n||typeof n!='object')throw new Error('That isn’t layout JSON from this planner.');
+ let kind,body,schema;
+ if(n.format===FORMAT){schema=Number.isInteger(n.schema)?n.schema:SCHEMA;kind=n.kind=='all'?'all':'profiles';body=kind=='all'?n.state:n}
+ else if(n.format)throw new Error('This file is from a different app.');
+ else if(Array.isArray(n)){kind='profiles';body={profiles:n}}
+ else if(n.type=='sdxl-profiles'){kind='profiles';body=n}
+ else if(Array.isArray(n.profiles)){kind='all';body=n}
+ else if(n.pages&&n.name!=null){kind='profiles';body={profiles:[n]}}
+ else throw new Error('That isn’t layout JSON from this planner.');
+ if(!body||!Array.isArray(body.profiles))throw new Error('The file has no profiles in it.');
+ if(schema==null)schema=Number.isInteger(body.schema)?body.schema:inferSchema(body);
+ body=JSON.parse(JSON.stringify(body));if(schema<SCHEMA)body=upgrade(body,schema);
+ const ps=body.profiles.map(normProfile),bad=ps.filter(x=>!x).length;
+ return {kind,schema,body,profiles:ps.filter(Boolean),bad,revs:body.revs&&typeof body.revs=='object'?body.revs:{},done:body.done&&typeof body.done=='object'?body.done:{}}}
+/* Versions are matched by ID: the file's copy of a version wins, versions that exist only here are kept. */
+function mergeVersions(c,old){const have=new Set([c.vid,...(c.versions||[]).map(v=>v.id)]);const extra=[];
+ if(old.vid&&!have.has(old.vid))extra.push(Object.assign({id:old.vid,name:old.vname||'Main',created:old.vcreated||0,saved:Date.now()},content(old)));
+ (old.versions||[]).forEach(v=>{if(!have.has(v.id))extra.push(JSON.parse(JSON.stringify(v)))});if(extra.length)c.versions=[...(c.versions||[]),...extra]}
+function mergeImport(r){const starter=S.profiles.length==1&&isBlankProf(S.profiles[0]);let up=0,add=0;const hit=new Set();
+ r.profiles.forEach(ip=>{let i=ip.id?S.profiles.findIndex((p,j)=>!hit.has(j)&&p.id==ip.id):-1;if(i<0)i=S.profiles.findIndex((p,j)=>!hit.has(j)&&p.name==ip.name);
+  const c=JSON.parse(JSON.stringify(ip));if(i>=0){const old=S.profiles[i];if(!c.id)c.id=old.id;if(!c.vid){c.vid=old.vid||'v-'+c.id;if(c.vname==null&&old.vname!=null)c.vname=old.vname;if(c.vcreated==null&&old.vcreated!=null)c.vcreated=old.vcreated}mergeVersions(c,old);S.profiles[i]=c;hit.add(i);up++}else{S.profiles.push(c);hit.add(S.profiles.length-1);add++}
+  if(r.revs[ip.name]&&S.revs[ip.name]>r.revs[ip.name])S.revs[ip.name]=r.revs[ip.name]});
+ Object.entries(r.done).forEach(([k,v])=>{if(typeof k=='string'&&v)S.done[k]=1});if(starter&&add&&!hit.has(0)){S.profiles.shift()}return [up,add]}
+$('ioApply').addEventListener('click',()=>{let n;try{n=JSON.parse($('ioText').value)}catch(e){toast('That isn’t valid JSON');return}
+ let r;try{r=readImport(n)}catch(e){toast(e.message||'That isn’t layout JSON from this planner.');return}
+ if(!r.profiles.length){toast('No usable profiles in that file');return}
+ const replace=$('ioReplace').checked;if(replace&&r.kind!='all'){toast('Replace needs an “all profiles” export');return}
+ const keep=JSON.stringify(S);snap();
+ try{let msg;
+  if(replace){const [o]=normState(Object.assign({},r.body,{profiles:r.profiles}));S=o;S.schema=Math.max(r.schema,SCHEMA);msg=`Replaced: ${r.profiles.length} profiles`}
+  else{const[u,a]=mergeImport(r);msg=`Imported: ${u} updated, ${a} added`}
+  if(r.schema>SCHEMA)S.notices.push(`That file came from a newer version of this planner (data format ${r.schema}; this page is ${SCHEMA}). Everything was imported and newer settings are kept, but some may not show or be editable here — reload or update the planner to use them.`);
+  else if(r.schema<SCHEMA)S.notices.push(`That file came from an older version of this planner (data format ${r.schema}) and was upgraded on import.`);
+  if(r.bad)S.notices.push(`${r.bad} profile${r.bad>1?'s':''} in that file ${r.bad>1?'were':'was'} damaged and skipped.`);
+  S.active=Math.min(S.active||0,S.profiles.length-1);migrate();pageIx=0;path=[];sel=null;save();render();renderNotices();toast(msg)}
+ catch(e){S=JSON.parse(keep);hist.pop();render();toast('Import failed — nothing was changed')}});
+let armReset=false;
+$('ioReset').addEventListener('click',e=>{if(!armReset){armReset=true;e.target.textContent='Click again to reset everything';return}snap();S=build();armReset=false;renderNotices();e.target.textContent='Reset all to defaults';pageIx=0;path=[];sel=null;save();render();toast('Defaults restored (Undo to revert)')});
+
+function kind(txt){const t=txt||'';return /Plugin:/i.test(t)?'plug':/\bverify\b/i.test(t)?'verify':/\bcustom\b/i.test(t)?'custom':null}
+function collect(){const out=[];S.profiles.forEach((p,pi)=>{const items=[];
+ const scan=(keys,where)=>keys.forEach((k,i)=>{if(k.t=='nav'||k.t=='back'||(!k.l&&!k.a))return;const txt=[k.a,k.a2,k.h,k.d].join(' ');const kd=k.g=='plug'?'plug':kind(txt);if(!kd)return;
+  items.push({kd,where:`${where} · R${Math.floor(i/9)+1} C${i%9+1}`,label:k.l,what:[k.a,k.a2&&('state 2: '+k.a2),k.h,k.d&&('double: '+k.d)].filter(Boolean).join(' · ')})});
+ p.pages.forEach((g,gi)=>{scan(g.keys,`Page ${gi+1} ${g.name}`);g.dials.forEach((d,di)=>{const txt=[d.l,d.r,d.p].join(' ');const kd=kind(txt);if(kd)items.push({kd,where:`Page ${gi+1} ${g.name} · Dial ${di+1}`,label:d.n,what:`◀ ${d.l} · ${d.r} ▶ · push ${d.p}`})})});
+ Object.values(p.folders||{}).forEach(f=>scan(f.keys,`Folder ${f.name}`));
+ // de-duplicate identical label+what (frame keys repeat on every page)
+ const seen=new Map();items.forEach(it=>{const key=it.kd+'|'+it.label+'|'+it.what;if(seen.has(key))seen.get(key).where+='; '+it.where.split(' · ').slice(-1)[0]+' ('+it.where.split(' · ')[0]+')';else seen.set(key,{...it})});
+ out.push({p:p.name,items:[...seen.values()]})});return out}
+const KN={custom:'Bind shortcut',verify:'Check shortcut',plug:'Custom plugin'};
+const doneKey=(p,it)=>p+'|'+it.label+'|'+it.what;
+function renderCheck(){const f=$('ckFilter').value,hide=$('ckHide').checked;
+ $('ckList').innerHTML=collect().map(({p,items})=>{const rows=items.filter(it=>(f=='all'||it.kd==f)&&!(hide&&S.done[doneKey(p,it)]));if(!rows.length)return'';const left=items.filter(it=>!S.done[doneKey(p,it)]).length;
+  return`<details class="ck"><summary>${esc(p)}<span>${left} of ${items.length} open</span></summary><div class="scroll"><table class="stack"><thead><tr><th></th><th>Key</th><th>Type</th><th>Needs</th><th>Where</th></tr></thead><tbody>${rows.map(it=>{const dk=doneKey(p,it),dn=!!S.done[dk];return`<tr class="${dn?'done':''}"><td><input type="checkbox" data-dk="${esc(dk)}"${dn?' checked':''} aria-label="Done: ${esc(it.label)}"></td><td>${esc(it.label)}</td><td><span class="tag">${KN[it.kd]}</span></td><td>${esc(it.what)}</td><td>${esc(it.where)}</td></tr>`}).join('')}</tbody></table></div></details>`}).join('')||'<p class="hint">Nothing left to assign.</p>'}
+$('ckFilter').addEventListener('change',renderCheck);$('ckHide').addEventListener('change',renderCheck);
+$('ckList').addEventListener('change',e=>{const c=e.target.closest('input[data-dk]');if(!c)return;if(c.checked)S.done[c.dataset.dk]=1;else delete S.done[c.dataset.dk];save();renderCheck()});
+function ckText(){return collect().map(({p,items})=>items.length?`${p}\n`+items.map(it=>`  [${S.done[doneKey(p,it)]?'x':' '}] ${it.label} — ${KN[it.kd]}: ${it.what}  (${it.where})`).join('\n'):'').filter(Boolean).join('\n\n')}
+function ckCsv(){const q=v=>'"'+String(v).replace(/"/g,'""')+'"';return['App,Key,Type,Needs,Where,Done'].concat(collect().flatMap(({p,items})=>items.map(it=>[p,it.label,KN[it.kd],it.what,it.where,S.done[doneKey(p,it)]?'yes':''].map(q).join(',')))).join('\n')}
+$('ckCopy').addEventListener('click',()=>copy(ckText(),'Checklist copied'));
+$('ckCsv').addEventListener('click',()=>copy(ckCsv(),'Checklist CSV copied'));
+function renderNotices(){$('notices').innerHTML=(S.notices||[]).map((n,i)=>`<div class="notice" role="status"><span>${esc(n)}</span><button type="button" data-ni="${i}">Dismiss</button></div>`).join('')}
+$('notices').addEventListener('click',e=>{const b=e.target.closest('button[data-ni]');if(!b)return;S.notices.splice(+b.dataset.ni,1);save();renderNotices()});
+if(self!==top){$('ioSave').hidden=true;$('ioSaveOne').hidden=true}
+const dl=(obj,name)=>{try{const u=URL.createObjectURL(new Blob([JSON.stringify(obj,null,1)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000)}catch(e){toast('Download blocked here — use Copy')}};
+$('ioSaveOne').addEventListener('click',()=>dl(oneExport(),P().name.replace(/[^\w.-]+/g,'-')+'.json'));
+$('ioSave').addEventListener('click',()=>dl(allExport(),'stream-deck-layouts.json'));
+$('ioOpen').addEventListener('click',()=>$('ioFile').click());
+$('ioFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;$('ioText').value=await f.text();e.target.value='';$('ioApply').click()});
+render();renderCheck();renderNotices();
+}
+</script>
+</body>
+</html>
